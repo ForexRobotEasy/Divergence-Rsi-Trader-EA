@@ -1,0 +1,101 @@
+
+
+// Divergence RSI Trader EA
+// Developer: Forex Robot Easy Team
+// Developer's site: forexroboteasy.com
+
+// Include necessary libraries
+#include <Trade\Trade.mqh>
+#include <Trade\PositionInfo.mqh>
+#include <Trade\SymbolInfo.mqh>
+#include <Trade\AccountInfo.mqh>
+#include <Series\Series.mqh>
+
+// Define constants
+#define SYMBOL_NAME 'EURUSD'
+#define TIMEFRAME PERIOD_H1
+#define RSI_PERIOD 14
+#define RSI_THRESHOLD 70
+#define STOP_LOSS 100
+#define TAKE_PROFIT 200
+#define MAX_RISK_PERCENTAGE 2
+
+// Initialize trade and series objects
+CTrade trade;
+CSeries series;
+
+// Initialize variables
+double accountBalance;
+double tradeVolume;
+double maxRiskAmount;
+double stopLossLevel;
+double takeProfitLevel;
+
+// Initialize function prototypes
+void OpenTrade(long volume, ENUM_ORDER_TYPE orderType);
+void CloseTrade();
+
+// Initialize OnInit() function
+void OnInit()
+{
+   // Set symbol and timeframe
+   SymbolSelect(SYMBOL_NAME, true);
+   Period_M1();
+
+   // Get account balance and calculate maximum risk amount
+   accountBalance = AccountInfoDouble(ACCOUNT_BALANCE);
+   maxRiskAmount = accountBalance * MAX_RISK_PERCENTAGE / 100;
+
+   // Set stop loss and take profit levels
+   stopLossLevel = NormalizeDouble(SymbolInfoDouble(SYMBOL_STOP_LEVEL) + STOP_LOSS * SymbolInfoDouble(SYMBOL_POINT), SymbolInfoInteger(SYMBOL_DIGITS));
+   takeProfitLevel = NormalizeDouble(SymbolInfoDouble(SYMBOL_STOP_LEVEL) + TAKE_PROFIT * SymbolInfoDouble(SYMBOL_POINT), SymbolInfoInteger(SYMBOL_DIGITS));
+}
+
+// Initialize OnTick() function
+void OnTick()
+{
+   // Calculate RSI value
+   double rsiValue = iRSI(SYMBOL_NAME, TIMEFRAME, RSI_PERIOD, PRICE_CLOSE, 0);
+
+   // Check for divergence
+   if (series[0] < series[1] && rsiValue > RSI_THRESHOLD)
+   {
+      // Calculate trade volume based on maximum risk amount
+      tradeVolume = MathFloor(maxRiskAmount / (SymbolInfoDouble(SYMBOL_MARGIN_INITIAL) * SymbolInfoDouble(SYMBOL_MARGIN_RATE)));
+
+      // Open trade
+      OpenTrade(tradeVolume, ORDER_TYPE_BUY);
+   }
+   else if (series[0] > series[1] && rsiValue < (100 - RSI_THRESHOLD))
+   {
+      // Calculate trade volume based on maximum risk amount
+      tradeVolume = MathFloor(maxRiskAmount / (SymbolInfoDouble(SYMBOL_MARGIN_INITIAL) * SymbolInfoDouble(SYMBOL_MARGIN_RATE)));
+
+      // Open trade
+      OpenTrade(tradeVolume, ORDER_TYPE_SELL);
+   }
+}
+
+// Define OpenTrade() function
+void OpenTrade(long volume, ENUM_ORDER_TYPE orderType)
+{
+   // Calculate stop loss and take profit levels
+   double stopLoss = Ask + stopLossLevel * (_OrderType() == ORDER_TYPE_BUY ? -1 : 1);
+   double takeProfit = Ask + takeProfitLevel * (_OrderType() == ORDER_TYPE_BUY ? 1 : -1);
+
+   // Open trade with specified volume, order type, stop loss, and take profit levels
+   trade.Buy(volume, SYMBOL_NAME, stopLoss, takeProfit);
+}
+
+// Define CloseTrade() function
+void CloseTrade()
+{
+   // Close all open trades
+   int totalPositions = PositionTotal();
+   for (int i = totalPositions - 1; i >= 0; i--)
+   {
+      PositionSelectByIndex(i);
+      trade.PositionClose(PositionGetInteger(POSITION_TICKET));
+   }
+}
+
